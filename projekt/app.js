@@ -1,3 +1,5 @@
+// app.js
+
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
@@ -13,33 +15,25 @@ const PORT = process.env.PORT || 5000;
 
 connectDB();
 
-// Zezwól na żądania z tego samego originu (bo frontend i backend na localhost)
+// CORS — zezwól na żądania z localhost:3000 i 5000
 app.use(cors({
-  origin: 'http://localhost:5000',
+  origin: ['http://localhost:3000', 'http://localhost:5000'],
   credentials: true,
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-// Serwowanie plików statycznych
-app.use(express.static(path.join(__dirname, 'public')));
+// ✅ 1. Najpierw serwuj pliki statyczne z build/
+app.use(express.static(path.join(__dirname, 'build')));
 
-// API
+// ✅ 2. Potem API
 app.use('/api/auth', authRoutes);
 app.use('/api', mainRoutes);
 
-// Obsługa SPA — przekierowanie wszystkich tras do index.html (opcjonalne)
-app.get('/register', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'register.html'));
-});
-
-app.get('/profile', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'profile.html'));
-});
-
+// ✅ 3. Na końcu — fallback dla SPA (tylko jeśli żądany zasób nie istnieje)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.resolve(__dirname, 'build', 'index.html'));
 });
 
 app.listen(PORT, () => {

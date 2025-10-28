@@ -1,3 +1,4 @@
+// src/components/AuthForm.jsx
 import React, { useState } from "react";
 import "./AuthForm.css";
 
@@ -12,10 +13,41 @@ const AuthForm = ({ mode, setMode }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert(`Tryb: ${mode.toUpperCase()}\n${JSON.stringify(formData, null, 2)}`);
-    // 🔗 Tu możesz dodać fetch('/api/login') lub axios do backendu
+
+    try {
+      const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+      };
+
+      // Backend nie przyjmuje username — usuwamy to pole
+      // (Twój model User ma tylko email i password)
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert("✅ " + data.message);
+        if (mode === "login") {
+          window.location.href = "/profile"; // przekierowanie do profilu
+        }
+      } else {
+        alert("❌ " + (data.details ? data.details.join(", ") : data.message));
+      }
+    } catch (err) {
+      alert("❌ Błąd połączenia z serwerem");
+    }
   };
 
   return (
@@ -23,17 +55,9 @@ const AuthForm = ({ mode, setMode }) => {
       <h2>{mode === "login" ? "Zaloguj się" : "Rejestracja"}</h2>
 
       <form onSubmit={handleSubmit}>
-        {mode === "register" && (
-          <input
-            type="text"
-            name="username"
-            placeholder="Nazwa użytkownika"
-            value={formData.username}
-            onChange={handleChange}
-            required
-          />
-        )}
-
+        {/* UWAGA: Twój backend NIE przyjmuje username — usuwamy to pole */}
+        {/* Jeśli chcesz dodać username, musisz zmodyfikować model User */}
+        
         <input
           type="email"
           name="email"
