@@ -1,4 +1,4 @@
-#komendy:
+# komendy:
 npm install react-scripts
 npm install react-dom
 npm install mongodb
