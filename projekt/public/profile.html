@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Profil</title>
+</head>
+<body>
+  <h1>Twój profil</h1>
+  <div id="profileData">Ładowanie...</div>
+  <br>
+  <button id="logoutBtn">Wyloguj się</button>
+  <br><br>
+  <a href="/">Powrót do logowania</a>
+
+  <script>
+    // Sprawdź, czy użytkownik jest zalogowany
+    fetch('/api/profile', {
+      credentials: 'include'
+    })
+    .then(res => {
+      if (res.ok) return res.json();
+      else throw new Error('Nie jesteś zalogowany');
+    })
+    .then(data => {
+      document.getElementById('profileData').innerHTML = `
+        <p><strong>E-mail:</strong> ${data.user.email}</p>
+        <p><strong>ID:</strong> ${data.user.id}</p>
+        <p>✅ Dostęp do chronionego zasobu udany!</p>
+      `;
+    })
+    .catch(err => {
+      document.getElementById('profileData').textContent = '❌ ' + err.message + '. Przekierowanie do logowania...';
+      setTimeout(() => window.location.href = '/', 2000);
+    });
+
+    // Wylogowanie
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      window.location.href = '/';
+    });
+  </script>
+</body>
+</html>
