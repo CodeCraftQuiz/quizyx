@@ -1,0 +1,96 @@
+body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: linear-gradient(135deg, #7a5cff, #8ec5ff);
+      margin: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #fff;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      font-size: 42px;
+      text-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    }
+
+    .form {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      padding: 25px;
+      margin: 20px 0;
+      width: 480px;
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+    }
+
+    .form h3 {
+      margin-top: 0;
+      font-size: 22px;
+      margin-bottom: 15px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 12px 14px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      outline: none;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 12px;
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #6a40ff, #8e85ff);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.2s;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    }
+
+    button:hover {
+      background: linear-gradient(135deg, #5433ff, #7f72ff);
+      transform: scale(1.02);
+    }
+
+    #answers div {
+      background: rgba(255, 255, 255, 0.18);
+      padding: 10px;
+      border-radius: 12px;
+      margin: 8px 0;
+    }
+
+    #topicsList, #questionsList {
+      background: rgba(0, 0, 0, 0.25);
+      padding: 20px;
+      width: 500px;
+      max-height: 350px;
+      overflow-y: auto;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.25);
+    }
+
+    h3 {
+      text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    input, textarea, select {
+        box-sizing: border-box; 
+        width: 100%;
+    }
+
+    .form {
+        width: 500px;   
+    }
