@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
@@ -6,7 +7,6 @@ const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  // Changed default to an online generator so it works without local files
   avatarUrl: { type: String, default: 'https://api.dicebear.com/7.x/avataaars/svg?seed=NewUser' },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   lastUsernameChange: { type: Date },
@@ -28,7 +28,7 @@ const QuizSchema = new Schema({
   title: { type: String, required: true },
   description: String,
   difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'medium' },
-  type: { type: String, enum: ['standard', 'exam', 'infinity', 'duel', 'millionaire'], default: 'standard' },
+  type: { type: String, enum: ['standard', 'exam', 'infinity', 'duel', 'millionaire', 'money_drop'], default: 'standard' },
   questions: [QuestionSchema],
   author: { type: Schema.Types.ObjectId, ref: 'User' },
   timeLimit: Number
@@ -37,7 +37,7 @@ const QuizSchema = new Schema({
 const ResultSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   quizId: { type: Schema.Types.ObjectId, ref: 'Quiz', required: true },
-  quizType: { type: String, enum: ['standard', 'exam', 'infinity', 'duel', 'millionaire'] },
+  quizType: { type: String, enum: ['standard', 'exam', 'infinity', 'duel', 'millionaire', 'money_drop'] },
   score: { type: Number, required: true },
   maxScore: Number,
   timeSpent: Number,

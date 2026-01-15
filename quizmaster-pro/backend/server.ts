@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 require('dotenv').config();
 const express = require('express');
@@ -14,27 +15,13 @@ app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 const SECRET_KEY = process.env.JWT_SECRET || 'dev_secret';
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/quizmaster';
 
-console.log("------------------------------------------------");
-console.log("Starting QuizMaster Backend...");
-console.log("MONGO_URI:", MONGO_URI);
-console.log("------------------------------------------------");
+mongoose.connect(MONGO_URI).then(() => console.log('✅ MongoDB Connected'));
 
-// Connect DB
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected Successfully'))
-  .catch(err => {
-      console.error('❌ MongoDB Connection Error:', err);
-      process.exit(1);
-  });
-
-// Middleware
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader) {
@@ -44,381 +31,253 @@ const authenticateJWT = (req, res, next) => {
       req.user = user;
       next();
     });
-  } else {
-    res.sendStatus(401);
-  }
+  } else res.sendStatus(401);
 };
 
-// --- AUTH ROUTES ---
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') next();
+  else res.status(403).json({ message: 'Brak uprawnień admina' });
+};
+
+// --- AUTH ---
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
-    
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existingUser) {
-        return res.status(400).json({ message: 'Użytkownik o takim emailu lub nazwie już istnieje.' });
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Auto-grant admin role for 'admin' username for demo purposes
-    const role = username.toLowerCase() === 'admin' ? 'admin' : 'user';
-    
-    const user = new User({ username, email, password: hashedPassword, role });
-    await user.save();
-    
-    // Auto login after register
-    const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY);
-    res.status(201).json({ 
-        token, 
-        user: { 
-            _id: user._id, 
-            username: user.username, 
-            role: user.role,
-            avatarUrl: user.avatarUrl,
-            winstreak: 0,
-            history: [],
-            friends: [],
-            friendRequests: []
-        } 
+    const user = new User({ 
+      username, 
+      email, 
+      password: hashedPassword, 
+      role: username.includes('admin') ? 'admin' : 'user',
+      avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + username
     });
-  } catch(e) { 
-      console.error(e);
-      res.status(500).json({ error: e.message }); 
-  }
+    await user.save();
+    const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY);
+    res.status(201).json({ token, user });
+  } catch(e) { res.status(400).json({ message: e.message }); }
 });
 
 app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email }).populate({
-        path: 'history',
-        populate: { path: 'quizId', select: 'title' }
-    });
-    
-    if (user && await bcrypt.compare(password, user.password)) {
-        const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY);
-        
-        // Transform history
-        const formattedHistory = user.history.map(h => ({
-            ...h.toObject(),
-            quizTitle: h.quizId ? h.quizId.title : 'Deleted Quiz',
-            quizId: h.quizId ? h.quizId._id : null
-        }));
-
-        res.json({ token, user: { 
-            _id: user._id, 
-            username: user.username, 
-            role: user.role,
-            avatarUrl: user.avatarUrl,
-            lastUsernameChange: user.lastUsernameChange,
-            winstreak: user.winstreak || 0,
-            maxWinstreak: user.maxWinstreak || 0,
-            friends: user.friends,
-            friendRequests: user.friendRequests,
-            history: formattedHistory
-        }});
-    } else {
-        res.status(401).json({ message: 'Nieprawidłowy email lub hasło' });
-    }
-  } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Internal Server Error" });
-  }
+  const { email, password } = req.body;
+  const user = await User.findOne({ email });
+  if (user && await bcrypt.compare(password, user.password)) {
+    const token = jwt.sign({ id: user._id, role: user.role }, SECRET_KEY);
+    res.json({ token, user });
+  } else res.status(401).json({ message: 'Błąd logowania' });
 });
 
 app.get('/api/auth/me', authenticateJWT, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id).populate({
-            path: 'history',
-            populate: { path: 'quizId', select: 'title' }
-        });
-        
-        if (!user) return res.sendStatus(404);
-
-        const formattedHistory = user.history.map(h => ({
-            ...h.toObject(),
-            quizTitle: h.quizId ? h.quizId.title : 'Deleted Quiz',
-            quizId: h.quizId ? h.quizId._id : null
-        }));
-
-        res.json({ 
-            _id: user._id, 
-            username: user.username, 
-            role: user.role, 
-            avatarUrl: user.avatarUrl,
-            lastUsernameChange: user.lastUsernameChange,
-            winstreak: user.winstreak || 0,
-            maxWinstreak: user.maxWinstreak || 0,
-            friends: user.friends,
-            friendRequests: user.friendRequests,
-            history: formattedHistory
-        });
-    } catch (e) {
-        console.error(e);
-        res.sendStatus(500);
-    }
+    // KLUCZOWE: Populujemy historię oraz zagnieżdżony quizId aby mieć dostęp do tytułu
+    const user = await User.findById(req.user.id).populate({
+        path: 'history',
+        populate: { path: 'quizId', select: 'title' }
+    });
+    res.json(user);
 });
 
 app.put('/api/user/profile', authenticateJWT, async (req, res) => {
     const { username, avatarUrl } = req.body;
     const user = await User.findById(req.user.id);
-    
-    if (username && username !== user.username) {
-        if (user.lastUsernameChange) {
-            const diffTime = Math.abs(new Date() - new Date(user.lastUsernameChange));
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            if (diffDays < 7) {
-                return res.status(400).json({ message: `Możesz zmienić nick raz na 7 dni. Spróbuj za ${7 - diffDays} dni.` });
-            }
-        }
-        user.username = username;
-        user.lastUsernameChange = new Date();
-    }
-
-    if (avatarUrl) {
-        user.avatarUrl = avatarUrl;
-    }
-
+    if (username) user.username = username;
+    if (avatarUrl) user.avatarUrl = avatarUrl;
     await user.save();
-    res.json({ message: 'Profil zaktualizowany', user });
+    res.json({ user });
 });
 
-// --- SOCIAL ROUTES ---
+// --- QUIZZES ---
+app.get('/api/quizzes', async (req, res) => res.json(await Quiz.find()));
+
+app.get('/api/quizzes/:id', async (req, res) => {
+    const quiz = await Quiz.findById(req.params.id);
+    if(!quiz) return res.status(404).json({message: "Not found"});
+    res.json(quiz);
+});
+
+app.post('/api/quizzes', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const quiz = new Quiz({ ...req.body, author: req.user.id });
+        await quiz.save();
+        res.status(201).json(quiz);
+    } catch(e) { 
+        console.error("Quiz creation error:", e);
+        res.status(400).json({ message: "Błąd walidacji: " + e.message }); 
+    }
+});
+
+app.put('/api/quizzes/:id', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const updated = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updated);
+    } catch(e) {
+        res.status(400).json({ message: "Błąd aktualizacji: " + e.message });
+    }
+});
+
+app.post('/api/quizzes/import', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const quizzes = req.body;
+        const formatted = quizzes.map(q => ({
+            ...q,
+            author: req.user.id,
+            _id: new mongoose.Types.ObjectId()
+        }));
+        const created = await Quiz.insertMany(formatted);
+        res.status(201).json(created);
+    } catch(e) { res.status(400).json({ message: e.message }); }
+});
+
+app.delete('/api/quizzes/:id', authenticateJWT, isAdmin, async (req, res) => {
+    await Quiz.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+});
+
+// --- SOCIAL ---
 app.get('/api/users/search', authenticateJWT, async (req, res) => {
     const { q } = req.query;
-    if (!q) return res.json([]);
     const users = await User.find({ 
-        username: { $regex: q, $options: 'i' }, 
-        _id: { $ne: req.user.id } 
-    }).select('_id username winstreak avatarUrl').limit(10);
+        username: { $regex: q || "", $options: 'i' },
+        _id: { $ne: req.user.id }
+    }).select('username avatarUrl winstreak _id');
     res.json(users);
-});
-
-app.post('/api/friends/request', authenticateJWT, async (req, res) => {
-    const { targetUserId } = req.body;
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) return res.status(404).json({ message: 'User not found' });
-    
-    if (targetUser.friendRequests.includes(req.user.id) || targetUser.friends.includes(req.user.id)) {
-        return res.status(400).json({ message: 'Request already sent or already friends' });
-    }
-    
-    targetUser.friendRequests.push(req.user.id);
-    await targetUser.save();
-    res.json({ message: 'Friend request sent' });
-});
-
-app.post('/api/friends/accept', authenticateJWT, async (req, res) => {
-    const { requesterId } = req.body;
-    const currentUser = await User.findById(req.user.id);
-    const requester = await User.findById(requesterId);
-
-    if (!currentUser.friends.includes(requesterId)) currentUser.friends.push(requesterId);
-    currentUser.friendRequests = currentUser.friendRequests.filter(id => id.toString() !== requesterId);
-    await currentUser.save();
-
-    if (!requester.friends.includes(req.user.id)) requester.friends.push(req.user.id);
-    await requester.save();
-
-    res.json({ message: 'Friend accepted' });
 });
 
 app.get('/api/friends', authenticateJWT, async (req, res) => {
     const user = await User.findById(req.user.id)
         .populate('friends', 'username winstreak avatarUrl')
         .populate('friendRequests', 'username avatarUrl');
-    
-    res.json({
-        friends: user.friends,
-        requests: user.friendRequests
+    res.json({ friends: user.friends || [], requests: user.friendRequests || [] });
+});
+
+app.post('/api/friends/request', authenticateJWT, async (req, res) => {
+    const { targetUserId } = req.body;
+    await User.findByIdAndUpdate(targetUserId, { $addToSet: { friendRequests: req.user.id } });
+    res.json({ message: 'Sent' });
+});
+
+app.post('/api/friends/accept', authenticateJWT, async (req, res) => {
+    const { requesterId } = req.body;
+    await User.findByIdAndUpdate(req.user.id, { 
+        $addToSet: { friends: requesterId },
+        $pull: { friendRequests: requesterId }
     });
+    await User.findByIdAndUpdate(requesterId, { $addToSet: { friends: req.user.id } });
+    res.json({ message: 'Accepted' });
 });
 
-// --- LEADERBOARD ---
-app.get('/api/leaderboard', async (req, res) => {
-    const results = await Result.find()
-        .sort({ score: -1 })
-        .limit(10)
-        .populate('userId', 'username winstreak')
-        .populate('quizId', 'title');
-    
-    const formatted = results.map(r => ({
-        _id: r._id,
-        username: r.userId ? r.userId.username : 'Unknown',
-        userWinstreak: r.userId ? r.userId.winstreak : 0,
-        quizTitle: r.quizId ? r.quizId.title : 'Deleted Quiz',
-        score: r.score,
-        date: r.date,
-        quizType: r.quizType
-    }));
-    res.json(formatted);
-});
+// --- ADS ---
+app.get('/api/ads', authenticateJWT, isAdmin, async (req, res) => res.json(await Advertisement.find()));
+app.get('/api/ads/active', async (req, res) => res.json(await Advertisement.find({ active: true })));
 
-// --- QUIZ ROUTES ---
-app.get('/api/quizzes', async (req, res) => {
-  const quizzes = await Quiz.find();
-  res.json(quizzes);
-});
-
-app.post('/api/quizzes', authenticateJWT, async (req, res) => {
-  if (req.user.role !== 'admin') return res.sendStatus(403);
-  const quiz = new Quiz({ ...req.body, author: req.user.id });
-  await quiz.save();
-  res.json(quiz);
-});
-
-app.post('/api/quizzes/import', authenticateJWT, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
-    const quizzes = req.body;
-    if(!Array.isArray(quizzes)) return res.status(400).json({message: "Expected array of quizzes"});
-    
+app.post('/api/ads', authenticateJWT, isAdmin, async (req, res) => {
     try {
-        const created = await Quiz.insertMany(quizzes.map(q => ({...q, author: req.user.id})));
-        res.json(created);
-    } catch(e) { res.status(500).json({error: e.message}); }
-});
-
-app.put('/api/quizzes/:id', authenticateJWT, async (req, res) => {
-  if (req.user.role !== 'admin') return res.sendStatus(403);
-  const updatedQuiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(updatedQuiz);
-});
-
-app.delete('/api/quizzes/:id', authenticateJWT, async (req, res) => {
-  if (req.user.role !== 'admin') return res.sendStatus(403);
-  await Quiz.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Deleted' });
-});
-
-// --- RESULTS (NEW) ---
-app.post('/api/results', authenticateJWT, async (req, res) => {
-    try {
-        const resultData = req.body;
-        // Verify user ID matches token just in case
-        if (resultData.userId !== req.user.id) {
-            return res.status(403).json({ message: "User mismatch" });
-        }
-
-        const result = new Result({ ...resultData, userId: req.user.id });
-        await result.save();
-
-        // Update User History logic
-        const user = await User.findById(req.user.id);
-        user.history.push(result._id);
-        
-        // Simple Winstreak Update for duel
-        if (result.quizType === 'duel') {
-            if (result.score >= (result.maxScore * 0.5)) {
-                user.winstreak = (user.winstreak || 0) + 1;
-                if (user.winstreak > (user.maxWinstreak || 0)) {
-                    user.maxWinstreak = user.winstreak;
-                }
-            } else {
-                user.winstreak = 0;
-            }
-        }
-        await user.save();
-        
-        res.status(201).json({ message: 'Result saved' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
+        const ad = new Advertisement(req.body);
+        await ad.save();
+        res.status(201).json(ad);
+    } catch(e) {
+        res.status(400).json({ message: e.message });
     }
 });
 
-// --- AD ROUTES ---
-app.get('/api/ads', async (req, res) => {
-    const ads = await Advertisement.find();
-    res.json(ads);
-});
-app.get('/api/ads/active', async (req, res) => {
-    const ads = await Advertisement.find({ active: true });
-    res.json(ads);
-});
-app.post('/api/ads', authenticateJWT, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
-    const ad = new Advertisement(req.body);
-    await ad.save();
-    res.json(ad);
-});
-app.put('/api/ads/:id', authenticateJWT, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
-    const updatedAd = await Advertisement.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updatedAd);
-});
-app.delete('/api/ads/:id', authenticateJWT, async (req, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
-    await Advertisement.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Ad deleted' });
+app.put('/api/ads/:id', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const updated = await Advertisement.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updated);
+    } catch(e) {
+        res.status(400).json({ message: e.message });
+    }
 });
 
-// --- SOCKET.IO 1v1 MATCHMAKING (REAL) ---
+app.delete('/api/ads/:id', authenticateJWT, isAdmin, async (req, res) => {
+    await Advertisement.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+});
+
+// --- RESULTS ---
+app.get('/api/leaderboard', async (req, res) => {
+    const results = await Result.find()
+        .sort({ score: -1 })
+        .limit(50)
+        .populate('userId', 'username winstreak avatarUrl')
+        .populate('quizId', 'title');
+    res.json(results);
+});
+
+app.post('/api/results', authenticateJWT, async (req, res) => {
+    try {
+        const result = new Result({ ...req.body, userId: req.user.id });
+        await result.save();
+        const user = await User.findById(req.user.id);
+        user.history.push(result._id);
+        if (req.body.quizType === 'duel' && req.body.won) user.winstreak++;
+        else if (req.body.quizType === 'duel') user.winstreak = 0;
+        await user.save();
+        res.json({ message: 'Saved' });
+    } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
+// --- SOCKET.IO ---
+const activeUsers = new Map(); // userId -> socketId
 const waitingQueue = []; 
 
 io.on('connection', (socket) => {
-    console.log('🔗 User connected to socket:', socket.id);
+    socket.on('register_user', (userId) => {
+        activeUsers.set(userId, socket.id);
+    });
 
-    // Join Matchmaking Queue
+    socket.on('challenge_friend', ({ friendId, quizId, challengerName, challengerAvatar }) => {
+        const friendSocketId = activeUsers.get(friendId);
+        if (friendSocketId) {
+            io.to(friendSocketId).emit('incoming_challenge', {
+                challengerUserId: [...activeUsers.entries()].find(([k,v]) => v === socket.id)?.[0],
+                challengerName, challengerAvatar, quizId
+            });
+        }
+    });
+
+    socket.on('accept_challenge', ({ challengerUserId, quizId }) => {
+        const challengerSocketId = activeUsers.get(challengerUserId);
+        const roomId = `room_${Date.now()}`;
+        if (challengerSocketId) {
+            socket.join(roomId);
+            io.to(challengerSocketId).socketsJoin(roomId);
+            io.to(roomId).emit('match_found', { roomId, quizId });
+        }
+    });
+
     socket.on('join_duel', ({ userId, username, avatarUrl, quizId }) => {
-        console.log(`👤 User ${username} joined queue for quiz ${quizId}`);
-        
-        // Check if anyone else is waiting for this quiz
-        const opponentIndex = waitingQueue.findIndex(p => p.quizId === quizId && p.socketId !== socket.id);
-
+        const opponentIndex = waitingQueue.findIndex(p => p.quizId === quizId && p.userId !== userId);
         if (opponentIndex > -1) {
-            // Match found!
             const opponent = waitingQueue.splice(opponentIndex, 1)[0];
-            const roomId = `duel_${socket.id}_${opponent.socketId}`;
-
-            console.log(`⚔️ Match found! ${username} vs ${opponent.username} in room ${roomId}`);
-
+            const roomId = `duel_${userId}_${opponent.userId}`;
             socket.join(roomId);
             const opponentSocket = io.sockets.sockets.get(opponent.socketId);
-            if (opponentSocket) {
-                opponentSocket.join(roomId);
+            if (opponentSocket) opponentSocket.join(roomId);
             
-                // Notify both players
-                // Tell Current User about Opponent
-                socket.emit('match_found', { 
-                    roomId, 
-                    opponentName: opponent.username, 
-                    opponentAvatar: opponent.avatarUrl 
-                });
-
-                // Tell Opponent about Current User
-                io.to(opponent.socketId).emit('match_found', { 
-                    roomId, 
-                    opponentName: username, 
-                    opponentAvatar: avatarUrl 
-                });
-            } else {
-                // Opponent disconnected while waiting? Put user back in queue logic (simplified here)
-                waitingQueue.push({ socketId: socket.id, userId, username, avatarUrl, quizId });
-            }
-
+            io.to(roomId).emit('match_found', { 
+                roomId, quizId,
+                players: [
+                    { userId, username, avatarUrl },
+                    { userId: opponent.userId, username: opponent.username, avatarUrl: opponent.avatarUrl }
+                ]
+            });
         } else {
-            // No match yet, add to queue
             waitingQueue.push({ socketId: socket.id, userId, username, avatarUrl, quizId });
         }
     });
 
-    // Handle Progress Updates during game
     socket.on('send_progress', ({ roomId, score, progress }) => {
-        // Broadcast to everyone in room EXCEPT sender
         socket.to(roomId).emit('opponent_update', { score, progress });
     });
 
+    socket.on('finish_duel', ({ roomId, score }) => {
+        socket.to(roomId).emit('opponent_finished', { score });
+    });
+
     socket.on('disconnect', () => {
-        // Remove from queue if waiting
+        activeUsers.forEach((v, k) => { if(v === socket.id) activeUsers.delete(k); });
         const idx = waitingQueue.findIndex(p => p.socketId === socket.id);
-        if(idx > -1) {
-            waitingQueue.splice(idx, 1);
-            console.log('User removed from queue');
-        }
+        if(idx > -1) waitingQueue.splice(idx, 1);
     });
 });
 
-
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(5000, () => console.log('🚀 Server Quizyx Red Edition on 5000'));

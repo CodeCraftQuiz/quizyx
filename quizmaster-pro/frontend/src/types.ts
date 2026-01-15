@@ -1,3 +1,4 @@
+
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin'
@@ -18,7 +19,7 @@ export interface User {
   _id: string;
   username: string;
   email: string;
-  avatarUrl: string;
+  avatarUrl: string; // New field
   role: UserRole;
   history: Result[];
   lastUsernameChange?: string; // ISO Date string
@@ -37,7 +38,8 @@ export interface Question {
   type: QuestionType;
 }
 
-export type QuizType = 'standard' | 'exam' | 'infinity' | 'duel' | 'millionaire';
+// Added 'money_drop' to QuizType to match usage in QuizRoom and fix type comparison errors
+export type QuizType = 'standard' | 'exam' | 'infinity' | 'duel' | 'millionaire' | 'money_drop';
 
 export interface Quiz {
   _id: string;
@@ -93,6 +95,6 @@ export interface Advertisement {
 export interface UserSummary {
     _id: string;
     username: string;
-    avatarUrl: string;
+    avatarUrl: string; // New field
     winstreak: number;
 }

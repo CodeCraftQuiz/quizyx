@@ -1,39 +1,113 @@
+
 <!DOCTYPE html>
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QuizMaster Pro</title>
+    <title>Quizyx - Red Fury Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              primary: '#2563eb', // Blue-600
-              primaryHover: '#1d4ed8', // Blue-700
-              secondary: '#0ea5e9', // Sky-500
-              dark: '#0f172a', // Slate-900
-              light: '#f8fafc', // Slate-50
-              surface: '#ffffff',
+              primary: '#ff0000',
+              primaryHover: '#cc0000',
+              secondary: '#ffcc00',
+              accent: '#ff4d4d',
+              dark: '#1a0000',
+              surface: '#2d0000',
+              card: '#3d0000',
+            },
+            boxShadow: {
+              'quizyx': '0 10px 40px rgba(0, 0, 0, 0.6)',
+              'fuchsia': '0 0 30px rgba(255, 0, 0, 0.6)',
+              'yellow-glow': '0 0 20px rgba(255, 204, 0, 0.4)',
+              'gold-glow': '0 0 50px rgba(255, 204, 0, 0.8)',
+            },
+            borderRadius: {
+              'quizyx': '0.75rem',
+              'quizyx-lg': '1.5rem',
             },
             animation: {
-              'bounce-in': 'bounceIn 0.5s cubic-bezier(0.8, 0, 1, 1)',
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'pop-in': 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              'pulse-red': 'pulseRed 2s infinite',
+              'flash-gold': 'flashGold 0.5s infinite alternate',
+              'slot-spin': 'slotSpin 0.1s infinite linear',
             },
             keyframes: {
-              bounceIn: {
-                '0%': { transform: 'scale(0.9)', opacity: '0' },
+              popIn: {
+                '0%': { transform: 'scale(0.95)', opacity: '0' },
                 '100%': { transform: 'scale(1)', opacity: '1' },
+              },
+              pulseRed: {
+                '0%, 100%': { opacity: 1, transform: 'scale(1)', boxShadow: '0 0 10px #ff0000' },
+                '50%': { opacity: 0.8, transform: 'scale(1.02)', boxShadow: '0 0 30px #ff0000' },
+              },
+              flashGold: {
+                'from': { textShadow: '0 0 10px #ffcc00, 0 0 20px #ffcc00', color: '#ffcc00' },
+                'to': { textShadow: '0 0 30px #ffffff, 0 0 60px #ffcc00', color: '#ffffff' }
+              },
+              slotSpin: {
+                '0%': { transform: 'translateY(-100%)' },
+                '100%': { transform: 'translateY(100%)' }
               }
             }
           }
         }
       }
     </script>
-  </head>
-  <body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+    <style>
+      body { 
+        background-color: #1a0000;
+        background-image: radial-gradient(circle at center, #350000 0%, #1a0000 100%);
+        background-attachment: fixed;
+        color: #ffffff; 
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      .cyber-lines {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 200%;
+        height: 200%;
+        background-image: 
+          repeating-linear-gradient(-45deg, transparent, transparent 140px, rgba(0,0,0,0.85) 140px, rgba(0,0,0,0.85) 185px),
+          repeating-linear-gradient(45deg, transparent, transparent 280px, rgba(0,0,0,0.5) 280px, rgba(0,0,0,0.5) 310px);
+        pointer-events: none;
+        z-index: -1;
+        opacity: 0.9;
+      }
+      ::-webkit-scrollbar { width: 10px; }
+      ::-webkit-scrollbar-track { background: #1a0000; }
+      ::-webkit-scrollbar-thumb { background: #ff0000; border-radius: 5px; border: 2px solid #1a0000; }
+      .text-glow { text-shadow: 0 0 15px rgba(255, 0, 0, 0.9); }
+      .text-glow-yellow { text-shadow: 0 0 10px rgba(255, 204, 0, 0.7); }
+      .scam-casino-bg {
+        background: #051505;
+        background-image: 
+            radial-gradient(circle at top, #0a2a0a 0%, #000 100%),
+            url('https://www.transparenttextures.com/patterns/felt.png');
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@^18.2.0/",
+    "react/": "https://esm.sh/react@^18.2.0/",
+    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.1",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+</head>
+  <body>
+    <div class="cyber-lines"></div>
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
+

@@ -1,167 +1,184 @@
-import React, { useState } from 'react';
-import { User } from '../types';
+
+import React, { useState, useMemo } from 'react';
+import { User, QuizType } from '../types';
 import { api, ASSETS } from '../services/api';
 
 interface ProfileProps {
     user: User;
     onUpdate: (user: User) => void;
+    volume: number;
+    setVolume: (v: number) => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
-    const [newUsername, setNewUsername] = useState(user.username || '');
-    const [newAvatar, setNewAvatar] = useState(user.avatarUrl || '');
-    const [avatarInputType, setAvatarInputType] = useState<'url' | 'gallery'>('gallery');
-    const [msg, setMsg] = useState({ type: '', text: '' });
+export const Profile: React.FC<ProfileProps> = ({ user, onUpdate, volume, setVolume }) => {
+    const [newUsername, setNewUsername] = useState(user.username);
+    const [newAvatar, setNewAvatar] = useState(user.avatarUrl);
+    const [isEditing, setIsEditing] = useState(false);
+    
+    // Filters for history
+    const [historyModeFilter, setHistoryModeFilter] = useState<QuizType | 'all'>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     const handleUpdate = async () => {
         try {
-            const updatedUser = await api.auth.updateProfile(newUsername, newAvatar);
-            onUpdate(updatedUser);
-            setMsg({ type: 'success', text: 'Profil zaktualizowany!' });
-        } catch (e: any) {
-            setMsg({ type: 'error', text: e.message || 'Błąd aktualizacji' });
-        }
+            const updated = await api.auth.updateProfile(newUsername, newAvatar);
+            onUpdate(updated);
+            setIsEditing(false);
+        } catch (e: any) { alert(e.message); }
     };
 
-    const nextChangeDate = user.lastUsernameChange 
-        ? new Date(new Date(user.lastUsernameChange).getTime() + 7 * 24 * 60 * 60 * 1000)
-        : null;
-    const canChangeName = !nextChangeDate || new Date() > nextChangeDate;
+    const filteredHistory = useMemo(() => {
+        if (!user.history) return [];
+        return [...user.history].reverse().filter(res => {
+            const matchesMode = historyModeFilter === 'all' || res.quizType === historyModeFilter;
+            return matchesMode;
+        });
+    }, [user.history, historyModeFilter]);
+
+    const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+    const currentItems = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-8">Mój Profil</h1>
-            
-            <div className="bg-white p-6 rounded-lg shadow-md space-y-6 mb-8">
-                
-                {/* Avatar Section */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Awatar</label>
-                    <div className="flex items-start space-x-4">
-                        <img src={newAvatar || user.avatarUrl} alt="Avatar Preview" className="h-20 w-20 rounded-full border-2 border-primary object-cover" />
-                        <div className="flex-1">
-                            <div className="flex space-x-2 text-sm mb-2">
-                                <button 
-                                    className={`px-3 py-1 rounded ${avatarInputType === 'gallery' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-gray-100'}`}
-                                    onClick={() => setAvatarInputType('gallery')}
-                                >
-                                    Galeria
-                                </button>
-                                <button 
-                                    className={`px-3 py-1 rounded ${avatarInputType === 'url' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-gray-100'}`}
-                                    onClick={() => setAvatarInputType('url')}
-                                >
-                                    Własny URL
-                                </button>
-                            </div>
-                            
-                            {avatarInputType === 'url' ? (
-                                <input 
-                                    type="text" 
-                                    className="w-full border p-2 rounded" 
-                                    placeholder="https://..."
-                                    value={newAvatar || ''}
-                                    onChange={(e) => setNewAvatar(e.target.value)}
-                                />
-                            ) : (
-                                <div className="grid grid-cols-5 gap-2">
-                                    {ASSETS.avatars.map((url, idx) => (
-                                        <img 
-                                            key={idx} 
-                                            src={url} 
-                                            className={`h-12 w-12 rounded-full cursor-pointer border-2 ${newAvatar === url ? 'border-primary' : 'border-transparent hover:border-gray-300'}`}
-                                            onClick={() => setNewAvatar(url)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+        <div className="max-w-5xl mx-auto py-16 px-4">
+            <div className="relative bg-surface rounded-quizyx-lg shadow-quizyx overflow-hidden border border-white/5 mb-16 animate-pop-in">
+                <div className="h-64 bg-primary relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary via-primaryHover to-dark opacity-80"></div>
+                    <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-surface to-transparent"></div>
+                </div>
+                <div className="px-12 pb-12 -mt-32 flex flex-col md:flex-row items-center md:items-end gap-12 relative z-10">
+                    <div className="relative group">
+                        <img src={user.avatarUrl} className="w-56 h-56 rounded-quizyx-lg border-[10px] border-surface shadow-2xl bg-dark object-cover transition-all group-hover:scale-105 border-primary/20" alt="avatar" />
+                        <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-secondary border-8 border-surface rounded-full shadow-yellow-glow animate-pulse"></div>
+                    </div>
+                    <div className="flex-1 text-center md:text-left mb-6">
+                        <h1 className="text-7xl font-black text-white tracking-tighter italic uppercase text-glow">{user.username}</h1>
+                        <p className="text-secondary font-black uppercase text-[10px] tracking-[0.6em] mt-3 italic">Ranga: Mistrz Areny</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button onClick={() => setIsEditing(!isEditing)} className="px-14 py-6 bg-primary text-white font-black rounded-full shadow-fuchsia uppercase italic tracking-widest text-sm active:scale-95 transition-all hover:bg-secondary hover:text-dark">
+                          {isEditing ? 'Zamknij Panel' : 'Konfiguracja'}
+                      </button>
                     </div>
                 </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Email (Tylko do odczytu)</label>
-                    <input type="text" disabled value={user.email || ''} className="mt-1 block w-full bg-gray-100 border border-gray-300 rounded-md p-2 text-gray-500"/>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Nazwa użytkownika</label>
-                    <input 
-                        type="text" 
-                        value={newUsername || ''} 
-                        onChange={(e) => setNewUsername(e.target.value)}
-                        className="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-primary focus:border-primary"
-                    />
-                    {!canChangeName && (
-                        <p className="text-xs text-red-500 mt-2">
-                            Zmiana nazwy możliwa po: {nextChangeDate?.toLocaleDateString()}
-                        </p>
-                    )}
-                </div>
-
-                <div className="pt-4">
-                    <button 
-                        onClick={handleUpdate}
-                        disabled={(!canChangeName && newUsername !== user.username)}
-                        className="w-full md:w-auto px-6 py-2 bg-primary text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-bold"
-                    >
-                        Zapisz Zmiany
-                    </button>
-                </div>
-
-                {msg.text && (
-                    <div className={`p-3 rounded ${msg.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {msg.text}
-                    </div>
-                )}
             </div>
 
-            <div>
-                <h2 className="text-2xl font-bold mb-4 flex items-center">
-                    Historia Gier
-                    <span className="ml-2 text-sm font-normal text-gray-500 bg-gray-200 px-2 py-1 rounded-full">{user.history?.length || 0} gier</span>
-                </h2>
-                <div className="bg-white shadow overflow-hidden rounded-lg border border-gray-200">
-                    {user.history && user.history.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quiz</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wynik</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Czas</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {[...user.history].reverse().map((result, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 transition">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {new Date(result.date).toLocaleDateString()} <span className="text-xs text-gray-400">{new Date(result.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            {isEditing && (
+                <div className="bg-surface rounded-quizyx shadow-quizyx p-16 mb-16 border border-primary/20 animate-pop-in">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                        <div>
+                            <label className="block text-[10px] font-black text-white/30 uppercase tracking-widest mb-6 italic">Tożsamość Cyfrowa (Nick)</label>
+                            <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)}
+                                   className="w-full px-8 py-6 bg-dark/50 border-2 border-transparent focus:border-primary rounded-quizyx outline-none transition-all font-black text-white text-2xl italic" />
+                            
+                            <div className="mt-12 bg-dark/20 p-8 rounded-quizyx border border-white/5">
+                              <label className="block text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4 italic">Ustawienia Dźwięku (BGM)</label>
+                              <div className="flex items-center gap-6">
+                                <span className="text-2xl">{volume === 0 ? '🔇' : '🔊'}</span>
+                                <input 
+                                  type="range" 
+                                  min="0" 
+                                  max="100" 
+                                  value={volume} 
+                                  onChange={(e) => setVolume(Number(e.target.value))}
+                                  className="flex-1 accent-primary h-2 rounded-lg cursor-pointer"
+                                />
+                                <span className="text-white font-black font-mono w-10 text-right">{volume}%</span>
+                              </div>
+                              <p className="text-[8px] font-black text-white/20 uppercase mt-4 tracking-widest">Atmosfera: Night City Ambient</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-white/30 uppercase tracking-widest mb-6 italic">Wybór Awatara</label>
+                            <div className="grid grid-cols-5 gap-4 mb-8">
+                                {ASSETS.avatars.map((url) => (
+                                    <div key={url} onClick={() => setNewAvatar(url)} 
+                                         className={`relative rounded-xl overflow-hidden border-4 cursor-pointer transition-all ${newAvatar === url ? 'border-secondary scale-110 shadow-yellow-glow' : 'border-transparent opacity-50 hover:opacity-100'}`}>
+                                        <img src={url} className="w-full h-16 object-cover" alt="Avatar" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={handleUpdate} className="mt-16 bg-primary text-white font-black px-16 py-8 rounded-quizyx shadow-fuchsia active:scale-95 transition-all uppercase italic tracking-tighter text-2xl hover:bg-secondary hover:text-dark">Zapisz Nowy Protokół</button>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                <div className="lg:col-span-1">
+                    <div className="bg-surface p-12 rounded-quizyx-lg shadow-quizyx border border-white/5 text-center">
+                        <h2 className="text-[10px] font-black text-white/30 uppercase tracking-[0.5em] mb-12 italic">Statystyki Bojowe</h2>
+                        <div className="space-y-16">
+                            <div><p className="text-7xl font-black text-secondary italic tracking-tighter shadow-yellow-glow inline-block">🔥 {user.winstreak}</p><p className="text-[10px] font-black text-white/20 uppercase mt-4 tracking-widest italic">Aktualny Streak</p></div>
+                            <div className="w-full h-px bg-white/5"></div>
+                            <div><p className="text-7xl font-black text-primary italic tracking-tighter text-glow">{user.history?.length || 0}</p><p className="text-[10px] font-black text-white/20 uppercase mt-4 tracking-widest italic">Zakończone Areny</p></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="lg:col-span-2">
+                    <div className="bg-surface rounded-quizyx-lg shadow-quizyx border border-white/5 overflow-hidden">
+                        <div className="p-10 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 bg-dark/20">
+                            <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter">Historia Logów</h2>
+                            <div className="flex gap-4">
+                                <select 
+                                    className="bg-dark/50 border border-white/10 rounded-full px-6 py-2 text-[9px] font-black text-white uppercase outline-none focus:border-secondary transition-all"
+                                    value={historyModeFilter}
+                                    onChange={e => { setHistoryModeFilter(e.target.value as any); setCurrentPage(1); }}
+                                >
+                                    <option value="all">Wszystkie Tryby</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="millionaire">Milionerzy</option>
+                                    <option value="money_drop">Money Drop</option>
+                                    <option value="duel">Duel</option>
+                                    <option value="infinity">Infinity</option>
+                                </select>
+                            </div>
+                        </div>
+                        <table className="w-full text-left">
+                            <thead className="bg-dark/50 text-[10px] font-black text-white/20 uppercase tracking-widest italic"><tr className="border-b border-white/5"><th className="px-10 py-6">Data</th><th className="px-10 py-6">Arena</th><th className="px-10 py-6 text-right">Zdobycz</th></tr></thead>
+                            <tbody className="divide-y divide-white/5">
+                                {currentItems.map((res, i) => {
+                                    const actualTitle = res.quizTitle || (typeof res.quizId === 'object' ? (res.quizId as any)?.title : 'Misja');
+                                    return (
+                                        <tr key={i} className="hover:bg-primary/5 transition-colors group">
+                                            <td className="px-10 py-8 text-xs text-white/30 font-bold">{new Date(res.date).toLocaleDateString()}</td>
+                                            <td className="px-10 py-8">
+                                                <p className="font-black text-white text-xl italic tracking-tight group-hover:text-secondary transition-colors">{actualTitle}</p>
+                                                <p className="text-[8px] text-primary/60 font-black uppercase mt-1">TYP: {res.quizType}</p>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
-                                                {result.quizTitle || 'Nieznany Quiz'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                                <span className={`font-bold ${result.score === result.maxScore ? 'text-green-600' : ''}`}>
-                                                    {result.score}
-                                                </span> 
-                                                <span className="text-gray-400"> / {result.maxScore}</span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                                                {result.timeSpent}s
+                                            <td className="px-10 py-8 text-right font-black text-primary text-3xl italic tracking-tighter group-hover:text-glow">
+                                                {res.quizType === 'money_drop' || res.quizType === 'millionaire' ? `$${res.score.toLocaleString()}` : `${res.score} PKT`}
                                             </td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="p-8 text-center flex flex-col items-center justify-center text-gray-500">
-                            <p>Brak historii gier.</p>
-                            <p className="text-sm mt-1">Zagraj w quiz, aby zobaczyć wyniki!</p>
-                        </div>
-                    )}
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                        
+                        {totalPages > 1 && (
+                            <div className="p-8 bg-dark/40 flex justify-between items-center border-t border-white/5">
+                                <button 
+                                    disabled={currentPage === 1}
+                                    onClick={() => setCurrentPage(c => c - 1)}
+                                    className="text-primary disabled:text-white/10 font-black uppercase text-xs italic tracking-widest flex items-center gap-2 hover:scale-110 transition-transform"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
+                                    Poprzednie Logi
+                                </button>
+                                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.5em] italic">Strona {currentPage} z {totalPages}</span>
+                                <button 
+                                    disabled={currentPage === totalPages}
+                                    onClick={() => setCurrentPage(c => c + 1)}
+                                    className="text-primary disabled:text-white/10 font-black uppercase text-xs italic tracking-widest flex items-center gap-2 hover:scale-110 transition-transform"
+                                >
+                                    Dalsze Logi
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                            </div>
+                        )}
+
+                        {filteredHistory.length === 0 && <div className="p-32 text-center text-white/5 font-black uppercase tracking-widest italic text-2xl">Baza danych pusta dla wybranych filtrów</div>}
+                    </div>
                 </div>
             </div>
         </div>

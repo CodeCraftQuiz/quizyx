@@ -1,120 +1,152 @@
+
 import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { api } from '../services/api';
 import { UserSummary } from '../types';
 
+const socket = io('http://localhost:5000');
+
 interface SocialProps {
-    onChallenge: (friendName: string) => void;
+    onChallenge: (quizId: string) => void;
 }
 
 export const Social: React.FC<SocialProps> = ({ onChallenge }) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<UserSummary[]>([]);
+    const [q, setQ] = useState('');
+    const [results, setResults] = useState<UserSummary[]>([]);
     const [friends, setFriends] = useState<UserSummary[]>([]);
     const [requests, setRequests] = useState<UserSummary[]>([]);
+    const [incomingChallenge, setIncomingChallenge] = useState<any>(null);
 
-    useEffect(() => {
-        loadFriends();
-    }, []);
+    useEffect(() => { 
+        load();
+        api.auth.getMe().then(me => {
+            socket.emit('register_user', me._id);
+        });
+        
+        socket.on('incoming_challenge', (data) => {
+            setIncomingChallenge(data);
+        });
 
-    const loadFriends = async () => {
-        const data = await api.social.getFriends();
-        setFriends(data.friends);
-        setRequests(data.requests);
+        socket.on('match_found', ({ quizId }) => {
+            onChallenge(quizId);
+        });
+
+        return () => {
+            socket.off('incoming_challenge');
+            socket.off('match_found');
+        };
+    }, [onChallenge]);
+
+    const load = async () => {
+        try {
+            const d = await api.social.getFriends();
+            setFriends(d.friends || []);
+            setRequests(d.requests || []);
+        } catch(e) {}
     };
 
     const handleSearch = async () => {
-        if (!searchQuery.trim()) return;
-        const res = await api.social.searchUsers(searchQuery);
-        setSearchResults(res);
+        if (!q.trim()) return;
+        setResults(await api.social.searchUsers(q));
     };
 
-    const sendRequest = async (id: string) => {
-        await api.social.sendRequest(id);
-        alert('Zaproszenie wysłane!');
+    const sendChallenge = async (friendId: string) => {
+        const me = await api.auth.getMe();
+        const allQuizzes = await api.quizzes.getAll();
+        const duelQuiz = allQuizzes.find(q => q.type === 'duel');
+        
+        if (!duelQuiz) {
+            alert("Brak dostępnych quizów typu 'duel' w bazie!");
+            return;
+        }
+
+        socket.emit('challenge_friend', {
+            friendId,
+            quizId: duelQuiz._id,
+            challengerName: me.username,
+            challengerAvatar: me.avatarUrl
+        });
+        alert("Wysłano wyzwanie!");
     };
 
-    const acceptRequest = async (id: string) => {
-        await api.social.acceptRequest(id);
-        loadFriends();
+    const acceptChallenge = () => {
+        socket.emit('accept_challenge', {
+            challengerUserId: incomingChallenge.challengerUserId,
+            quizId: incomingChallenge.quizId
+        });
+        setIncomingChallenge(null);
     };
 
     return (
-        <div className="max-w-5xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* LEFT: Search & Requests */}
-            <div className="space-y-8">
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h2 className="text-xl font-bold mb-4">Znajdź znajomych</h2>
-                    <div className="flex gap-2 mb-4">
-                        <input 
-                            type="text" 
-                            className="flex-1 border p-2 rounded" 
-                            placeholder="Nazwa użytkownika..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        <button onClick={handleSearch} className="bg-primary text-white px-4 rounded">Szukaj</button>
+        <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-10">
+            <div className="lg:col-span-2 space-y-10">
+                {incomingChallenge && (
+                    <div className="bg-primary p-8 rounded-quizyx-lg text-white shadow-fuchsia animate-bounce flex justify-between items-center border border-white/20">
+                        <div>
+                            <h3 className="text-2xl font-black italic uppercase tracking-tighter">Wyzwanie od {incomingChallenge.challengerName}!</h3>
+                            <p className="text-[10px] font-black uppercase opacity-50 mt-1">Szybka partia 1v1? Zegar tyka!</p>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={acceptChallenge} className="bg-white text-primary px-8 py-3 rounded-full font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Graj ⚔️</button>
+                            <button onClick={() => setIncomingChallenge(null)} className="bg-black/20 px-8 py-3 rounded-full font-black uppercase text-xs hover:bg-black/40">Odrzuć</button>
+                        </div>
                     </div>
-                    <ul className="space-y-2">
-                        {searchResults.map(u => (
-                            <li key={u._id} className="flex justify-between items-center border-b pb-2">
-                                <div className="flex items-center space-x-2">
-                                    <img src={u.avatarUrl} alt={u.username} className="w-8 h-8 rounded-full bg-gray-200 object-cover" />
-                                    <span>{u.username} <span className="text-xs text-orange-500">🔥 {u.winstreak}</span></span>
+                )}
+
+                <div className="bg-surface rounded-quizyx-lg shadow-quizyx p-10 border border-white/5">
+                    <h2 className="text-3xl font-black text-white mb-8 italic text-glow">Szukaj <span className="text-primary">Braci boju</span></h2>
+                    <div className="flex gap-4">
+                        <input type="text" placeholder="Nick wojownika..." value={q} onChange={e => setQ(e.target.value)}
+                            className="flex-1 bg-dark/50 border-2 border-transparent focus:border-primary rounded-quizyx px-8 py-5 outline-none text-white font-black transition-all" />
+                        <button onClick={handleSearch} className="bg-primary text-white font-black px-12 rounded-quizyx shadow-fuchsia uppercase italic tracking-widest text-xs">Namierz</button>
+                    </div>
+                    <div className="mt-10 space-y-4">
+                        {results.map(u => (
+                            <div key={u._id} className="flex items-center justify-between p-6 bg-dark/50 rounded-quizyx border border-white/5 hover:border-primary/50 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <img src={u.avatarUrl} className="w-12 h-12 rounded-xl object-cover" />
+                                    <p className="font-black text-white">{u.username}</p>
                                 </div>
-                                <button onClick={() => sendRequest(u._id)} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded">
-                                    Dodaj
-                                </button>
-                            </li>
+                                <button onClick={() => api.social.sendRequest(u._id).then(load)} className="text-primary font-black uppercase text-xs italic hover:underline">Dodaj do Plutonu</button>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 </div>
 
                 {requests.length > 0 && (
-                    <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-400">
-                        <h2 className="text-xl font-bold mb-4">Zaproszenia do znajomych</h2>
-                        <ul className="space-y-2">
-                            {requests.map(u => (
-                                <li key={u._id} className="flex justify-between items-center">
-                                    <div className="flex items-center space-x-2">
-                                        <img src={u.avatarUrl} alt={u.username} className="w-8 h-8 rounded-full bg-gray-200 object-cover" />
-                                        <span className="font-medium">{u.username}</span>
+                    <div className="bg-surface rounded-quizyx-lg shadow-quizyx p-10 border border-white/5 animate-pop-in">
+                        <h2 className="text-xl font-black text-white mb-6 uppercase italic">Prośby o znajomość</h2>
+                        <div className="space-y-4">
+                            {requests.map(r => (
+                                <div key={r._id} className="flex items-center justify-between bg-dark/30 p-4 rounded-xl border border-white/5">
+                                    <div className="flex items-center gap-4">
+                                        <img src={r.avatarUrl} className="w-10 h-10 rounded-lg object-cover" />
+                                        <p className="text-white font-black text-sm">{r.username}</p>
                                     </div>
-                                    <button onClick={() => acceptRequest(u._id)} className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
-                                        Akceptuj
-                                    </button>
-                                </li>
+                                    <button onClick={() => api.social.acceptRequest(r._id).then(load)} className="bg-primary px-6 py-2 rounded-full text-white text-[10px] font-black uppercase shadow-fuchsia active:scale-95">Akceptuj</button>
+                                </div>
                             ))}
-                        </ul>
+                        </div>
                     </div>
                 )}
             </div>
 
-            {/* RIGHT: Friends List */}
-            <div className="bg-white p-6 rounded-lg shadow h-fit">
-                <h2 className="text-xl font-bold mb-6">Moi Znajomi ({friends.length})</h2>
-                {friends.length === 0 ? (
-                    <p className="text-gray-500">Nie masz jeszcze żadnych znajomych.</p>
-                ) : (
-                    <ul className="space-y-4">
-                        {friends.map(f => (
-                            <li key={f._id} className="flex items-center justify-between p-3 bg-gray-50 rounded hover:bg-blue-50 transition">
-                                <div className="flex items-center space-x-3">
-                                    <img src={f.avatarUrl} alt={f.username} className="w-10 h-10 rounded-full bg-blue-200 object-cover border border-blue-300" />
-                                    <div>
-                                        <p className="font-bold text-gray-800">{f.username}</p>
-                                        <p className="text-xs text-orange-500 font-bold">Seria: {f.winstreak} 🔥</p>
-                                    </div>
+            <div className="bg-surface rounded-quizyx-lg shadow-quizyx border border-white/5 p-10 h-fit sticky top-28">
+                <h2 className="text-xl font-black text-white mb-10 italic uppercase tracking-widest">Twoi Znajomi ({friends.length})</h2>
+                <div className="space-y-6">
+                    {friends.map(f => (
+                        <div key={f._id} className="flex items-center justify-between group p-3 rounded-xl hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-4">
+                                <img src={f.avatarUrl} className="w-14 h-14 rounded-2xl border border-white/10 group-hover:scale-110 transition-transform object-cover shadow-lg" />
+                                <div>
+                                    <p className="font-black text-white text-sm">{f.username}</p>
+                                    <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">🔥 {f.winstreak} streak</p>
                                 </div>
-                                <button 
-                                    onClick={() => onChallenge(f.username)}
-                                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded shadow text-sm font-bold flex items-center"
-                                >
-                                    ⚔️ 1v1
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                            </div>
+                            <button onClick={() => sendChallenge(f._id)} className="w-12 h-12 bg-primary text-white rounded-2xl shadow-fuchsia flex items-center justify-center text-xl hover:scale-110 transition-transform active:scale-90">⚔️</button>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

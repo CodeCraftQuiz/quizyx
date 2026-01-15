@@ -1,180 +1,211 @@
-import { User, Quiz, Advertisement, Result, UserSummary } from '../types';
-import { io, Socket } from 'socket.io-client';
 
-const API_URL = 'http://localhost:5000/api';
-const SOCKET_URL = 'http://localhost:5000';
+import { User, Quiz, Advertisement, Result, UserRole, QuizDifficulty, QuestionType, AdLocation, AdTriggerType, UserSummary } from '../types';
 
-// --- ASSETS ---
 export const ASSETS = {
     avatars: [
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Bob',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Jack',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Midnight',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Bella',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Socks',
-        'https://api.dicebear.com/7.x/avataaars/svg?seed=Lola'
+        '/components/profilowki/zdjecie1.jpg',
+        '/components/profilowki/Avatar1.png',
+        '/components/profilowki/Avatar2.png',
+        '/components/profilowki/Avatar3.png',
+        '/components/profilowki/Avatar4.png'
     ],
     ads: [
-        'https://placehold.co/600x400/2563eb/white?text=Super+Promo',
-        'https://placehold.co/600x200/orange/white?text=Mega+Wyprzedaż',
-        'https://placehold.co/400x400/red/white?text=Kup+Teraz',
-        'https://placehold.co/300x600/green/white?text=Eko+Energia',
-        'https://placehold.co/800x600/black/white?text=Tech+World'
+        '/components/reklamy/reklama1.jpg',
+        '/components/reklamy/reklama2.jpg',
+        '/components/reklamy/reklama3.jpg',
+        '/components/reklamy/reklama4.png' 
     ]
 };
 
-// Helper for JWT headers
-const getAuthHeaders = () => {
+const API_BASE = 'http://localhost:5000/api';
+
+const getHeaders = () => {
     const token = localStorage.getItem('token');
-    return token ? { 
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json' 
-    } : { 
-        'Content-Type': 'application/json' 
+    return {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     };
 };
-
-// Helper for fetch wrapper
-const request = async (endpoint: string, options: RequestInit = {}) => {
-    const headers: Record<string, string> = {
-        ...getAuthHeaders(),
-        ...(options.headers as any || {})
-    };
-
-    const res = await fetch(`${API_URL}${endpoint}`, {
-        ...options,
-        headers
-    } as RequestInit);
-
-    if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `API Error: ${res.status}`);
-    }
-    
-    const text = await res.text();
-    return text ? JSON.parse(text) : {};
-};
-
-// SOCKET INSTANCE
-let socket: Socket | null = null;
 
 export const api = {
   auth: {
     login: async (email: string, password: string): Promise<User> => {
-        const data = await request('/login', {
+        const res = await fetch(`${API_BASE}/login`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || 'Błąd logowania');
+        }
+        const data = await res.json();
         localStorage.setItem('token', data.token);
         return data.user;
     },
     register: async (data: any): Promise<User> => {
-        const res = await request('/register', {
+        const res = await fetch(`${API_BASE}/register`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        localStorage.setItem('token', res.token);
-        return res.user;
-    },
-    updateProfile: async (username: string, avatarUrl?: string): Promise<User> => {
-        const res = await request('/user/profile', {
-            method: 'PUT',
-            body: JSON.stringify({ username, avatarUrl })
-        });
-        return res.user;
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || 'Błąd rejestracji');
+        }
+        const d = await res.json();
+        localStorage.setItem('token', d.token);
+        return d.user;
     },
     getMe: async (): Promise<User> => {
-        return await request('/auth/me');
+        const res = await fetch(`${API_BASE}/auth/me`, { headers: getHeaders() });
+        if (!res.ok) throw new Error('Nieautoryzowany');
+        return res.json();
     },
-    logout: () => {
-        localStorage.removeItem('token');
-        if (socket) socket.disconnect();
+    updateProfile: async (username: string, avatarUrl?: string): Promise<User> => {
+        const res = await fetch(`${API_BASE}/user/profile`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify({ username, avatarUrl })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || 'Błąd aktualizacji');
+        }
+        const d = await res.json();
+        return d.user;
+    },
+    logout: () => localStorage.removeItem('token')
+  },
+  quizzes: {
+    getAll: async (): Promise<Quiz[]> => {
+        const res = await fetch(`${API_BASE}/quizzes`, { headers: getHeaders() });
+        if (!res.ok) return [];
+        return res.json();
+    },
+    getById: async (id: string): Promise<Quiz> => {
+        const res = await fetch(`${API_BASE}/quizzes/${id}`, { headers: getHeaders() });
+        if (!res.ok) throw new Error("Nie znaleziono quizu");
+        return res.json();
+    },
+    create: async (quiz: Partial<Quiz>) => {
+        const res = await fetch(`${API_BASE}/quizzes`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(quiz)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || "Błąd zapisu quizu");
+        }
+        return res.json();
+    },
+    update: async (id: string, quiz: Partial<Quiz>) => {
+        const res = await fetch(`${API_BASE}/quizzes/${id}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify(quiz)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || "Błąd aktualizacji quizu");
+        }
+        return res.json();
+    },
+    import: async (quizzes: any[]) => {
+        const res = await fetch(`${API_BASE}/quizzes/import`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(quizzes)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || "Błąd importu quizów");
+        }
+        return res.json();
+    },
+    delete: async (id: string) => {
+        await fetch(`${API_BASE}/quizzes/${id}`, { method: 'DELETE', headers: getHeaders() });
+    },
+    getInfinityQuestions: async () => {
+        const res = await fetch(`${API_BASE}/quizzes`, { headers: getHeaders() });
+        const all: Quiz[] = await res.json();
+        const questions = all.flatMap(q => q.questions).sort(() => 0.5 - Math.random());
+        return { 
+            _id: 'inf', title: 'Infinity Mode', type: 'infinity', 
+            questions: questions.slice(0, 50), difficulty: QuizDifficulty.HARD 
+        } as Quiz;
     }
   },
   social: {
-      searchUsers: async (query: string): Promise<UserSummary[]> => {
-          return await request(`/users/search?q=${encodeURIComponent(query)}`);
-      },
-      getFriends: async (): Promise<{friends: UserSummary[], requests: UserSummary[]}> => {
-          return await request('/friends');
-      },
-      sendRequest: async (targetUserId: string): Promise<void> => {
-          await request('/friends/request', {
-              method: 'POST',
-              body: JSON.stringify({ targetUserId })
-          });
-      },
-      acceptRequest: async (requesterId: string): Promise<void> => {
-          await request('/friends/accept', {
-              method: 'POST',
-              body: JSON.stringify({ requesterId })
-          });
-      }
-  },
-  quizzes: {
-    getAll: async (): Promise<Quiz[]> => request('/quizzes'),
-    getById: async (id: string): Promise<Quiz | undefined> => {
-        const quizzes = await request('/quizzes');
-        return quizzes.find((q: Quiz) => q._id === id);
+    getFriends: async () => {
+        const res = await fetch(`${API_BASE}/friends`, { headers: getHeaders() });
+        if (!res.ok) return { friends: [], requests: [] };
+        return res.json();
     },
-    getInfinityQuestions: async (count: number = 50): Promise<Quiz> => {
-        const quizzes: Quiz[] = await request('/quizzes');
-        const allQuestions = quizzes.flatMap(q => q.questions);
-        const shuffled = allQuestions.sort(() => 0.5 - Math.random()).slice(0, count);
-        return {
-            _id: 'infinity_session',
-            title: 'Tryb Nieskończoności',
-            type: 'infinity',
-            difficulty: 'hard' as any,
-            questions: shuffled
-        };
+    searchUsers: async (q: string) => {
+        const res = await fetch(`${API_BASE}/users/search?q=${q}`, { headers: getHeaders() });
+        if (!res.ok) return [];
+        return res.json();
     },
-    create: async (quiz: Quiz): Promise<void> => request('/quizzes', { method: 'POST', body: JSON.stringify(quiz) }),
-    import: async (quizzes: Quiz[]): Promise<void> => request('/quizzes/import', { method: 'POST', body: JSON.stringify(quizzes) }),
-    update: async (id: string, quizData: Partial<Quiz>): Promise<void> => request(`/quizzes/${id}`, { method: 'PUT', body: JSON.stringify(quizData) }),
-    delete: async (id: string): Promise<void> => request(`/quizzes/${id}`, { method: 'DELETE' })
+    sendRequest: async (targetUserId: string) => {
+        await fetch(`${API_BASE}/friends/request`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ targetUserId })
+        });
+    },
+    acceptRequest: async (requesterId: string) => {
+        await fetch(`${API_BASE}/friends/accept`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ requesterId })
+        });
+    }
   },
   ads: {
-    getAll: async (): Promise<Advertisement[]> => request('/ads'),
-    getActive: async (): Promise<Advertisement[]> => request('/ads/active'),
-    create: async (ad: Advertisement): Promise<void> => request('/ads', { method: 'POST', body: JSON.stringify(ad) }),
-    update: async (id: string, adData: Partial<Advertisement>): Promise<void> => request(`/ads/${id}`, { method: 'PUT', body: JSON.stringify(adData) }),
-    delete: async (id: string): Promise<void> => request(`/ads/${id}`, { method: 'DELETE' })
+    getAll: async () => {
+        const res = await fetch(`${API_BASE}/ads`, { headers: getHeaders() });
+        if (!res.ok) return [];
+        return res.json();
+    },
+    getActive: async () => {
+        const res = await fetch(`${API_BASE}/ads/active`, { headers: getHeaders() });
+        if (!res.ok) return [];
+        return res.json();
+    },
+    create: async (ad: any) => {
+        const res = await fetch(`${API_BASE}/ads`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(ad) });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || "Błąd zapisu reklamy");
+        }
+        return res.json();
+    },
+    update: async (id: string, ad: any) => {
+        const res = await fetch(`${API_BASE}/ads/${id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(ad) });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || "Błąd aktualizacji reklamy");
+        }
+        return res.json();
+    },
+    delete: async (id: string) => {
+        await fetch(`${API_BASE}/ads/${id}`, { method: 'DELETE', headers: getHeaders() });
+    }
   },
   results: {
-    submit: async (result: Result): Promise<void> => {
-        await request('/results', { method: 'POST', body: JSON.stringify(result) });
+    submit: async (result: Result) => {
+        await fetch(`${API_BASE}/results`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(result)
+        });
     },
-    getLeaderboard: async (): Promise<Result[]> => request('/leaderboard')
-  },
-  // New Real-time Socket API
-  socket: {
-      connect: () => {
-          if (!socket) {
-              socket = io(SOCKET_URL);
-          }
-          return socket;
-      },
-      joinDuel: (userId: string, username: string, avatarUrl: string, quizId: string) => {
-          if (!socket) socket = io(SOCKET_URL);
-          socket.emit('join_duel', { userId, username, avatarUrl, quizId });
-      },
-      sendProgress: (roomId: string, score: number, progress: number) => {
-          if (socket) socket.emit('send_progress', { roomId, score, progress });
-      },
-      onMatchFound: (callback: (data: any) => void) => {
-          if (socket) socket.on('match_found', callback);
-      },
-      onOpponentUpdate: (callback: (data: any) => void) => {
-          if (socket) socket.on('opponent_update', callback);
-      },
-      disconnect: () => {
-          if (socket) {
-              socket.disconnect();
-              socket = null;
-          }
-      }
+    getLeaderboard: async () => {
+        const res = await fetch(`${API_BASE}/leaderboard`, { headers: getHeaders() });
+        if (!res.ok) return [];
+        return res.json();
+    }
   }
 };

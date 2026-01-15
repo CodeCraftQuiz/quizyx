@@ -1,134 +1,151 @@
+
 import React, { useEffect, useState } from 'react';
-import { api } from '../services/api';
-import { Result, QuizType } from '../types';
+import { api, ASSETS } from '../services/api';
+import { Result, UserSummary, Quiz } from '../types';
 
 export const Leaderboard: React.FC = () => {
     const [scores, setScores] = useState<Result[]>([]);
+    const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+    const [selectedQuizId, setSelectedQuizId] = useState<string>('all');
     const [filter, setFilter] = useState<'global' | 'friends'>('global');
-    const [modeFilter, setModeFilter] = useState<QuizType | 'all'>('all');
-    const [friendsIds, setFriendsIds] = useState<string[]>([]);
+    const [friends, setFriends] = useState<UserSummary[]>([]);
+    const [me, setMe] = useState<any>(null);
 
     useEffect(() => {
-        // Load initial data
-        Promise.all([
-            api.results.getLeaderboard(),
-            api.social.getFriends()
-        ]).then(([results, socialData]) => {
-            setScores(results);
-            setFriendsIds(socialData.friends.map(f => f._id));
-        });
+        const load = async () => {
+            try {
+                const [sData, qData] = await Promise.all([
+                    api.results.getLeaderboard(),
+                    api.quizzes.getAll()
+                ]);
+                setScores(sData || []);
+                setQuizzes(qData || []);
+                
+                const token = localStorage.getItem('token');
+                if (token) {
+                    const [fData, meData] = await Promise.all([
+                        api.social.getFriends().catch(() => ({friends:[]})),
+                        api.auth.getMe().catch(() => null)
+                    ]);
+                    setFriends(fData?.friends || []);
+                    setMe(meData);
+                }
+            } catch (err) {
+                console.error("Leaderboard load error", err);
+            }
+        };
+        load();
     }, []);
 
-    const filteredScores = scores.filter(s => {
-        const matchesFriend = filter === 'global' ? true : friendsIds.includes(s.userId);
-        const matchesMode = modeFilter === 'all' ? true : s.quizType === modeFilter;
-        return matchesFriend && matchesMode;
+    const friendIds = new Set(friends.map(f => f._id));
+    if (me) friendIds.add(me._id);
+
+    const filtered = scores.filter(s => {
+        const matchesType = filter === 'global' ? true : friendIds.has(typeof s.userId === 'string' ? s.userId : (s.userId as any)?._id);
+        const matchesQuiz = selectedQuizId === 'all' || (typeof s.quizId === 'string' ? s.quizId === selectedQuizId : (s.quizId as any)?._id === selectedQuizId);
+        return matchesType && matchesQuiz;
     });
 
-    const getModeLabel = (mode: string) => {
-        switch(mode) {
-            case 'standard': return 'Standardowy';
-            case 'exam': return 'Egzamin';
-            case 'infinity': return 'Nieskończoność';
-            case 'duel': return 'Pojedynek 1v1';
-            case 'millionaire': return 'Milionerzy';
-            default: return 'Inny';
+    const AvatarImage = ({ user, fallbackName }: { user: any, fallbackName: string }) => {
+        const [imgError, setImgError] = useState(false);
+        const avatarUrl = user?.avatarUrl || ASSETS.avatars[0];
+        if (imgError || !avatarUrl) {
+            return (
+                <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center border border-primary/50 font-black text-primary text-xl shadow-fuchsia uppercase italic">
+                    {fallbackName.charAt(0)}
+                </div>
+            );
         }
-    };
-
-    const getRankStyle = (index: number) => {
-        switch(index) {
-            case 0: return 'bg-yellow-50 border-l-4 border-yellow-400';
-            case 1: return 'bg-slate-100 border-l-4 border-slate-400';
-            case 2: return 'bg-orange-50 border-l-4 border-orange-400';
-            default: return 'hover:bg-slate-50';
-        }
+        return (
+            <div className="w-12 h-12 rounded-2xl bg-dark flex items-center justify-center border border-white/5 font-black text-primary text-xl overflow-hidden shadow-lg">
+                <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" onError={() => setImgError(true)} />
+            </div>
+        );
     };
 
     return (
-        <div className="max-w-5xl mx-auto px-4 py-12">
-            <h1 className="text-4xl font-extrabold mb-8 text-center text-slate-800">Ranking Graczy</h1>
-            
-            {/* Friend Filter */}
-            <div className="flex justify-center mb-6 space-x-4 bg-white p-2 rounded-full shadow-sm w-fit mx-auto border border-slate-200">
-                <button 
-                    onClick={() => setFilter('global')}
-                    className={`px-8 py-2 rounded-full font-bold transition-all ${filter === 'global' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                    🌎 Globalny
-                </button>
-                <button 
-                    onClick={() => setFilter('friends')}
-                    className={`px-8 py-2 rounded-full font-bold transition-all ${filter === 'friends' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-                >
-                    👥 Znajomi
-                </button>
+        <div className="max-w-4xl mx-auto py-16 px-4">
+            <div className="text-center mb-16">
+                <h1 className="text-5xl font-black text-white mb-6 tracking-tighter uppercase italic text-glow">
+                    Ranking <span className="text-primary">Mistrzów</span>
+                </h1>
+                
+                <div className="flex flex-col md:flex-row items-center justify-center gap-6 mt-12">
+                    <div className="inline-flex p-1.5 bg-surface rounded-full shadow-quizyx border border-white/5">
+                        <button onClick={() => setFilter('global')}
+                                className={`px-10 py-3 rounded-full font-black text-xs uppercase tracking-widest transition-all ${filter === 'global' ? 'bg-primary text-white shadow-fuchsia' : 'text-white/40 hover:text-primary'}`}>
+                            🌎 Globalny
+                        </button>
+                        <button onClick={() => setFilter('friends')} disabled={!me}
+                                className={`px-10 py-3 rounded-full font-black text-xs uppercase tracking-widest transition-all ${!me ? 'opacity-20 cursor-not-allowed' : (filter === 'friends' ? 'bg-primary text-white shadow-fuchsia' : 'text-white/40 hover:text-primary')}`}>
+                            👥 Znajomi
+                        </button>
+                    </div>
+
+                    <div className="w-full md:w-64">
+                        <select 
+                            className="w-full bg-surface border border-white/10 p-4 rounded-full text-white font-black outline-none focus:border-primary transition-all text-xs uppercase italic tracking-widest"
+                            value={selectedQuizId}
+                            onChange={e => setSelectedQuizId(e.target.value)}
+                        >
+                            <option value="all">Wszystkie Quizy</option>
+                            {quizzes.map(q => (
+                                <option key={q._id} value={q._id}>{q.title}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            {/* Mode Filter */}
-            <div className="flex justify-center flex-wrap gap-2 mb-10">
-                {['all', 'standard', 'duel', 'millionaire', 'infinity', 'exam'].map((mode) => (
-                    <button 
-                        key={mode}
-                        onClick={() => setModeFilter(mode as any)} 
-                        className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-                            modeFilter === mode 
-                            ? 'bg-blue-100 text-blue-800 border-blue-200' 
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                        }`}
-                    >
-                        {mode === 'all' ? 'Wszystkie' : getModeLabel(mode)}
-                    </button>
-                ))}
-            </div>
-
-            <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-slate-100">
-                <table className="min-w-full divide-y divide-slate-100">
-                    <thead className="bg-blue-900 text-white">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Miejsce</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Gracz</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Tryb</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Seria (1v1)</th>
-                            <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider">Wynik</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100">
-                        {filteredScores.map((score, idx) => (
-                            <tr key={score._id} className={`transition-colors ${getRankStyle(idx)}`}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {idx === 0 && <span className="text-2xl">🥇</span>}
-                                    {idx === 1 && <span className="text-2xl">🥈</span>}
-                                    {idx === 2 && <span className="text-2xl">🥉</span>}
-                                    {idx > 2 && <span className="font-bold text-slate-400 pl-2">#{idx + 1}</span>}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900 flex items-center">
-                                    <div className={`h-10 w-10 rounded-full flex items-center justify-center mr-3 font-bold text-sm shadow-sm
-                                        ${idx === 0 ? 'bg-yellow-100 text-yellow-700' : idx === 1 ? 'bg-slate-200 text-slate-700' : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-50 text-slate-500'}`}>
-                                        {score.username?.[0]}
-                                    </div>
-                                    <span className={idx < 3 ? 'text-lg' : ''}>{score.username}</span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-slate-500 text-sm">
-                                    <span className="px-2 py-1 bg-slate-100 rounded text-xs uppercase font-bold text-slate-600 border border-slate-200">
-                                        {getModeLabel(score.quizType || 'standard')}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-orange-500 font-bold">
-                                    {score.userWinstreak ? (
-                                        <span className="flex items-center gap-1">
-                                            {score.userWinstreak} <span className="animate-pulse">🔥</span>
-                                        </span>
-                                    ) : '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right font-black text-blue-700 text-lg">
-                                    {score.score.toLocaleString()}
-                                </td>
+            <div className="bg-surface rounded-quizyx-lg shadow-quizyx border border-white/10 overflow-hidden animate-pop-in">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-dark/50 text-[10px] font-black text-white/20 uppercase tracking-widest italic">
+                            <tr>
+                                <th className="px-10 py-6">Poz.</th>
+                                <th className="px-8 py-6">Uczestnik</th>
+                                <th className="px-8 py-6 text-center">Seria</th>
+                                <th className="px-10 py-6 text-right">Wynik</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {filteredScores.length === 0 && <div className="p-12 text-center text-slate-400 font-medium">Brak wyników w tej kategorii.</div>}
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {filtered.map((s, i) => {
+                                const userObj = typeof s.userId === 'object' ? (s.userId as any) : null;
+                                const quizObj = typeof s.quizId === 'object' ? (s.quizId as any) : null;
+                                const userName = userObj?.username || s.username || "Anonim";
+                                const userStreak = userObj?.winstreak || s.userWinstreak || 0;
+                                const quizTitle = quizObj?.title || s.quizTitle || "Misja";
+                                const isMe = me?._id === (userObj?._id || s.userId);
+
+                                return (
+                                    <tr key={s._id || i} className={`hover:bg-primary/10 transition-colors ${isMe ? 'bg-primary/20' : ''}`}>
+                                        <td className="px-10 py-8">
+                                            {i < 3 ? <span className="text-3xl drop-shadow-lg">{['🥇','🥈','🥉'][i]}</span> : <span className="font-black text-white/20 text-lg">#{i+1}</span>}
+                                        </td>
+                                        <td className="px-8 py-8">
+                                            <div className="flex items-center gap-4">
+                                                <AvatarImage user={userObj || s} fallbackName={userName} />
+                                                <div>
+                                                    <p className="font-black text-white text-lg tracking-tight italic leading-none">{userName}</p>
+                                                    <p className="text-[10px] text-primary/60 font-black uppercase tracking-widest mt-1.5">{quizTitle}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-8 text-center">
+                                            <span className="text-secondary font-black text-lg text-glow-yellow">🔥 {userStreak}</span>
+                                        </td>
+                                        <td className="px-10 py-8 text-right font-black text-primary text-2xl tracking-tighter italic text-glow">
+                                            {s.quizType === 'millionaire' || s.quizType === 'money_drop' ? `$${s.score.toLocaleString()}` : s.score.toLocaleString()}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+                {filtered.length === 0 && (
+                    <div className="p-32 text-center text-white/5 font-black uppercase tracking-widest italic">Pusta matryca danych</div>
+                )}
             </div>
         </div>
     );
