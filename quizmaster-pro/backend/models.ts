@@ -7,7 +7,7 @@ const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  avatarUrl: { type: String, default: 'https://api.dicebear.com/7.x/avataaars/svg?seed=NewUser' },
+  avatarUrl: { type: String, default: 'https://api.dicebear.com/7.x/micah/svg?seed=NewUser' },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   lastUsernameChange: { type: Date },
   history: [{ type: Schema.Types.ObjectId, ref: 'Result' }],

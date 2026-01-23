@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { Quiz, QuestionType, AdTriggerType, Result } from '../types';
@@ -123,17 +122,29 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ quiz, userId, onFinish, trig
 
   const handleFinish = async (finalScore: number) => {
     const isDuel = quiz.type === 'duel';
-    if (isDuel && roomId) socket.emit('finish_duel', { roomId, score: finalScore });
 
-    const res: Result = {
+    const won =
+      isDuel
+        ? finalScore > (opponent?.score ?? 0)
+        : true;
+
+    if (isDuel && roomId) {
+      socket.emit('finish_duel', { roomId, score: finalScore });
+    }
+
+    const res: Result & { won?: boolean } = {
       quizId: quiz._id,
       quizType: quiz.type,
       userId: userId,
       score: finalScore,
-      maxScore: quiz.type === 'money_drop' || quiz.type === 'millionaire' ? 1000000 : quiz.questions.length * 10,
+      maxScore:
+        quiz.type === 'money_drop' || quiz.type === 'millionaire'
+          ? 1000000
+          : quiz.questions.length * 10,
       date: new Date().toISOString(),
       timeSpent: Math.floor((Date.now() - startTime.current) / 1000),
       quizTitle: quiz.title,
+      ...(isDuel ? { won } : {})
     };
 
     await api.results.submit(res);
@@ -142,9 +153,9 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ quiz, userId, onFinish, trig
     setLocalFinished(true);
 
     if (isDuel && (!opponent || !opponent.finished)) {
-        setWaitingForOpponent(true);
+      setWaitingForOpponent(true);
     } else {
-        setShowResult(true);
+      setShowResult(true);
     }
   };
 

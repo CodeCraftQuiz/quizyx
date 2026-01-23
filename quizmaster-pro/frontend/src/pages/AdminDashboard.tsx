@@ -1,14 +1,24 @@
-
 import React, { useState, useEffect } from 'react';
 import { Quiz, Advertisement, AdLocation, AdTriggerType, QuizDifficulty, QuestionType, Question } from '../types';
-import { api, ASSETS } from '../services/api';
+import { api } from '../services/api';
+
+
+const ASSETS = {
+  ads: [
+    '/assets/ads/banner_1.jpg',
+    '/assets/ads/banner_2.jpg',
+    '/assets/ads/banner_3.jpg',
+    '/assets/ads/banner_4.jpg',
+
+  ],
+};
 
 export const AdminDashboard: React.FC = () => {
   const [tab, setTab] = useState<'quizzes' | 'ads'>('quizzes');
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [ads, setAds] = useState<Advertisement[]>([]);
   
-  // Quiz Edit/Create State
+
   const [isQuizEditorOpen, setIsQuizEditorOpen] = useState(false);
   const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -16,7 +26,7 @@ export const AdminDashboard: React.FC = () => {
     title: '', description: '', difficulty: QuizDifficulty.MEDIUM, type: 'standard', timeLimit: 30, questions: []
   });
 
-  // Ad Form State
+
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adForm, setAdForm] = useState<Partial<Advertisement>>({
       title: '', content: '', location: AdLocation.POPUP, triggerType: AdTriggerType.ON_LOGIN, priority: 1, active: true
@@ -94,7 +104,6 @@ export const AdminDashboard: React.FC = () => {
     if (!quizForm.title) return alert("Tytuł jest wymagany");
     if (!quizForm.questions || quizForm.questions.length === 0) return alert("Proszę dodać przynajmniej jedno pytanie.");
 
-    // Walidacja pytań
     for (let i = 0; i < quizForm.questions.length; i++) {
         const q = quizForm.questions[i];
         if (!q.content) return alert(`Pytanie ${i+1} nie może być puste.`);
@@ -124,7 +133,7 @@ export const AdminDashboard: React.FC = () => {
       const newQuestion: Question = {
           content: '',
           answers: ['', ''],
-          correctAnswers: [0], // Domyślnie pierwsza odpowiedź poprawna
+          correctAnswers: [0],
           type: QuestionType.SINGLE
       };
       setQuizForm(prev => ({ ...prev, questions: [...(prev.questions || []), newQuestion] }));
@@ -140,7 +149,6 @@ export const AdminDashboard: React.FC = () => {
       const newQuestions = [...(quizForm.questions || [])];
       newQuestions[index] = { ...newQuestions[index], [field]: value };
       
-      // Jeśli zmieniamy na single, a mamy wiele poprawnych, zostawiamy tylko pierwszą
       if (field === 'type' && value === QuestionType.SINGLE && newQuestions[index].correctAnswers.length > 1) {
           newQuestions[index].correctAnswers = [newQuestions[index].correctAnswers[0]];
       }
@@ -169,7 +177,7 @@ export const AdminDashboard: React.FC = () => {
         .filter(idx => idx !== aIndex)
         .map(idx => idx > aIndex ? idx - 1 : idx);
       
-      if (q.correctAnswers.length === 0) q.correctAnswers = [0]; // Zawsze musi być jakaś poprawna
+      if (q.correctAnswers.length === 0) q.correctAnswers = [0];
       
       setQuizForm(prev => ({ ...prev, questions: newQuestions }));
   };
@@ -430,8 +438,9 @@ export const AdminDashboard: React.FC = () => {
                         ) : (
                             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-white/5 p-2 rounded-xl bg-dark/20">
                                 {ASSETS.ads.map((url, idx) => (
-                                    <img key={idx} src={url} alt="Option" className={`w-full h-16 object-cover cursor-pointer border-4 rounded-lg transition-all ${adForm.content === url ? 'border-primary scale-95 shadow-fuchsia' : 'border-transparent opacity-40 hover:opacity-100'}`}
-                                        onClick={() => setAdForm({...adForm, content: url})} />
+                                    <img key={idx} src={url} alt={`Ad option ${idx + 1}`} 
+                                         className={`w-full h-16 object-cover cursor-pointer border-4 rounded-lg transition-all ${adForm.content === url ? 'border-primary scale-95 shadow-fuchsia' : 'border-transparent opacity-40 hover:opacity-100'}`}
+                                         onClick={() => setAdForm({...adForm, content: url})} />
                                 ))}
                             </div>
                         )}
